@@ -11,10 +11,7 @@ function normalizeText(s) {
   }
 }
 
-/**
- * Mock analyser (déterministe) — renvoie un résultat basé sur les mots-clés.
- * Utile pour le dev local sans clé OpenAI.
- */
+
 function mockAnalyze(text) {
   const s = normalizeText(text)
   const hasUrl = /https?:\/\/[^\s]+/i.test(text)
@@ -68,9 +65,9 @@ Route.post('/analyze', async ({ request, response }) => {
   console.log('[/analyze] OPENAI_KEY détectée:', OPENAI_KEY ? 'Oui' : 'Non')
 console.log('[/analyze] OPENAI_KEY (TRUNC) =', OPENAI_KEY?.slice(0,6) + '...' || 'none')
 
-  // Decide mode
- const useMock = !OPENAI_KEY || OPENAI_KEY.toUpperCase() === 'MOCK' || OPENAI_KEY.toUpperCase() === 'RANDOM'
- //const useMock = true;
+// il faut enlever ce commentaire puis utilise votre clé api pour le .env (OPENAI_API_KEY) puis commenter la ligne 70
+//const useMock = !OPENAI_KEY || OPENAI_KEY.toUpperCase() === 'MOCK' || OPENAI_KEY.toUpperCase() === 'RANDOM'
+ const useMock = true;
   console.log('[/analyze] Mode:', useMock ? 'MOCK (pas d’appel réel à OpenAI)' : 'REAL (appel OpenAI)')
 
   try {
@@ -81,7 +78,7 @@ console.log('[/analyze] OPENAI_KEY (TRUNC) =', OPENAI_KEY?.slice(0,6) + '...' ||
     }
 
     // --- REAL mode: appel OpenAI Chat Completions (gpt-3.5-turbo) ---
-    // Construire le prompt / messages
+   
     const systemPrompt = `Tu es un assistant qui détecte si un e-mail est du phishing. 
 Réponds strictement en JSON avec les champs: score (nombre 0-100), verdict (court), explain (texte court), et details (objet optionnel).`
     const userPrompt = `Analyse ce message et renvoie un JSON. Message: ${text}`
@@ -115,19 +112,15 @@ Réponds strictement en JSON avec les champs: score (nombre 0-100), verdict (cou
     )
 
     console.log('[/analyze] OpenAI status:', resp.status)
-    // Log part of the response for debugging (ne pas loger la clé)
     const raw = resp.data
     console.log('[/analyze] OpenAI raw response keys:', Object.keys(raw))
 
-    // Extract assistant content
     const assistant = raw?.choices?.[0]?.message?.content || raw?.choices?.[0]?.text || ''
     console.log('[/analyze] Assistant text (truncated 500 chars):', assistant.slice(0, 500))
 
-    // Try to parse JSON from assistant
     try {
       const parsed = JSON.parse(assistant)
       console.log('[/analyze] Parsed JSON from assistant:', parsed)
-      // Normalize parsed fields
       const out = {
         score: typeof parsed.score === 'number' ? Math.max(0, Math.min(100, parsed.score)) : 0,
         verdict: parsed.verdict || parsed.message || parsed.explain || 'Aucun verdict',
@@ -137,9 +130,7 @@ Réponds strictement en JSON avec les champs: score (nombre 0-100), verdict (cou
       console.log('[/analyze] Final output (from OpenAI parsed):', out)
       return response.json(out)
     } catch (e) {
-      // If assistant didn't return valid JSON, fallback: try to infer score from text
       console.warn('[/analyze] Impossible de parser JSON depuis OpenAI. fallback -> renvoyer le texte brut.')
-      // Simple fallback: look for percentage in the assistant text
       const m = (assistant || '').match(/(\d{1,3})\s*%/)
       const score = m ? Math.max(0, Math.min(100, parseInt(m[1], 10))) : 0
       const verdict = assistant || `Score estimé: ${score}%`
@@ -148,7 +139,6 @@ Réponds strictement en JSON avec les champs: score (nombre 0-100), verdict (cou
       return response.json(out)
     }
   } catch (err) {
-    // Log erreur pour debug
     console.error('[/analyze] ERREUR lors du traitement:', err?.message || err)
     if (err?.response?.data) {
       console.error('[/analyze] OpenAI response data:', JSON.stringify(err.response.data).slice(0, 2000))
